@@ -1,0 +1,18 @@
+{
+	"name": "pematon/mysql-session-handler",
+	"description": "MySQL session handler for Nette Framework",
+	"license": "MIT",
+	"authors": [
+		{
+			"name": "Pematon, s.r.o.",
+			"homepage": "http://www.pematon.com"
+		}
+	],
+	"require": {
+		"php": ">=5.3",
+		"nette/database": ">=2.2"
+	},
+	"autoload": {
+		"classmap": ["src/"]
+	}
+}
