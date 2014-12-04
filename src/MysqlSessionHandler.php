@@ -27,12 +27,9 @@ class MysqlSessionHandler extends Nette\Object implements \SessionHandlerInterfa
 		$this->tableName = $tableName;
 	}
 
-	/**
-	 * Returns hash in binary(16) format.
-	 */
 	protected function hash($id)
 	{
-		return md5($id, true);
+		return md5($id);
 	}
 
 	private function lock() {

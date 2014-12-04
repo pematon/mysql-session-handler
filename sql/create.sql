@@ -1,7 +1,7 @@
 DROP TABLE IF EXISTS `sessions`;
 
 CREATE TABLE `sessions` (
-  `id` binary(16) NOT NULL,
+  `id` char(32) CHARSET 'ascii' NOT NULL,
   `timestamp` int unsigned NOT NULL,
   `data` longtext NOT NULL,
   PRIMARY KEY (`id`)
