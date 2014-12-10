@@ -2,6 +2,11 @@
 
 Custom PHP session handler for [Nette Framework](http://nette.org/) that uses MySQL database for storage.
 
+## Requirements
+
+- [nette/database](https://github.com/nette/database) 2.2+
+- PHP 5.3+
+
 ## Installation
 
 Prefered way to install is by [Composer](http://getcomposer.org/):
@@ -19,3 +24,7 @@ After installation register an extension in config.neon:
 	extensions:
 		sessionHandler: Pematon\Session\DI\MysqlSessionHandlerExtension
 ```
+
+## Features
+
+- For security reasons Session ID is stored as MD5 hash into database.
