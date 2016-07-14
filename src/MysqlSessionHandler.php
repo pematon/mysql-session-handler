@@ -121,8 +121,23 @@ class MysqlSessionHandler extends Nette\Object implements \SessionHandlerInterfa
 
 	public function gc($maxLifeTime)
 	{
+		$maxTimestamp = time() - $maxLifeTime;
+
+		// Try to avoid a conflict when running garbage collection simultaneously on two
+		// MySQL servers at a very busy site in a master-master replication setup by
+		// subtracting one tenth of $maxLifeTime (but at least one day) from $maxTimestamp
+		// for each server with reasonably small ID except for the server with ID 1.
+		//
+		// In a typical master-master replication setup, the server IDs are 1 and 2.
+		// There is no subtraction on server 1 and one day (or one tenth of $maxLifeTime)
+		// subtraction on server 2.
+		$serverId = $this->context->query("SELECT @@server_id as `server_id`")->fetch()->server_id;
+		if ($serverId > 1 && $serverId < 10) {
+			$maxTimestamp -= ($serverId - 1) * max(86400, $maxLifeTime / 10);
+		}
+
 		$this->context->table($this->tableName)
-			->where('timestamp < ?', (time() - $maxLifeTime))
+			->where('timestamp < ?', $maxTimestamp)
 			->delete();
 
 		return TRUE;
