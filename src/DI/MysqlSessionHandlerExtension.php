@@ -22,7 +22,11 @@ class MysqlSessionHandlerExtension extends Nette\DI\CompilerExtension
 			->setClass('Pematon\Session\MysqlSessionHandler')
 			->addSetup('setTableName', [$config['tableName']]);
 
-		$builder->getDefinition('session')
-			->addSetup('setHandler', array($definition));
+
+		$sessionDefinition = $builder->getDefinition('session');
+		$sessionSetup = $sessionDefinition->getSetup();
+		# Prepend setHandler method to other possible setups (setExpiration) which would start session prematurely
+		array_unshift($sessionSetup, new Nette\DI\Statement('setHandler', array($definition)));
+		$sessionDefinition->setSetup($sessionSetup);
 	}
 }
