@@ -17,7 +17,11 @@ $ composer require pematon/mysql-session-handler:~1.0
 
 ## Setup
 
-After installation register an extension in config.neon:
+After installation:
+
+1) Create the table sessions using SQL in [sql/create.sql](sql/create.sql).
+
+2) Register an extension in config.neon:
 
 ```neon
 	extensions:
