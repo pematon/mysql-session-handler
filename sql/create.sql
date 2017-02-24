@@ -1,5 +1,3 @@
-DROP TABLE IF EXISTS `sessions`;
-
 CREATE TABLE `sessions` (
   `id` char(32) CHARSET 'ascii' NOT NULL,
   `timestamp` int unsigned NOT NULL,
