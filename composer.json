@@ -9,8 +9,9 @@
 		}
 	],
 	"require": {
-		"php": ">=5.3",
-		"nette/database": ">=2.2"
+		"php": ">=5.4",
+		"nette/database": ">=2.2",
+		"nette/di": ">=2.2"
 	},
 	"autoload": {
 		"classmap": ["src/"]
