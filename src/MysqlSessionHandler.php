@@ -8,7 +8,7 @@ use Nette;
  * Storing session to database.
  * Inspired by: https://github.com/JedenWeb/SessionStorage/
  */
-class MysqlSessionHandler extends Nette\Object implements \SessionHandlerInterface
+class MysqlSessionHandler implements \SessionHandlerInterface
 {
 	private $tableName;
 
