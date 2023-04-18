@@ -3,30 +3,33 @@
 namespace Pematon\Session\DI;
 
 use Nette;
+use Nette\DI\Definitions\ServiceDefinition;
 
 class MysqlSessionHandlerExtension extends Nette\DI\CompilerExtension
 {
-	private $defaults = [
-		'tableName' => 'sessions',
-	];
+    private array $defaults = [
+        "tableName" => "session",
+    ];
 
-	public function loadConfiguration()
-	{
-		parent::loadConfiguration();
+    public function loadConfiguration(): void
+    {
+        parent::loadConfiguration();
 
-		$config = $this->getConfig($this->defaults);
+        $config = $this->getConfig() + $this->defaults;
 
-		$builder = $this->getContainerBuilder();
+        $builder = $this->getContainerBuilder();
 
-		$definition = $builder->addDefinition($this->prefix('sessionHandler'))
-			->setClass('Pematon\Session\MysqlSessionHandler')
-			->addSetup('setTableName', [$config['tableName']]);
+        $definition = $builder->addDefinition($this->prefix("sessionHandler"))
+            ->setType('Pematon\Session\MysqlSessionHandler')
+            ->addSetup("setTableName", [$config["tableName"]]);
 
+        /** @var ServiceDefinition $sessionDefinition */
+        $sessionDefinition = $builder->getDefinition("session");
 
-		$sessionDefinition = $builder->getDefinition('session');
-		$sessionSetup = $sessionDefinition->getSetup();
-		# Prepend setHandler method to other possible setups (setExpiration) which would start session prematurely
-		array_unshift($sessionSetup, new Nette\DI\Statement('setHandler', array($definition)));
-		$sessionDefinition->setSetup($sessionSetup);
-	}
+        $sessionSetup = $sessionDefinition->getSetup();
+        # Prepend setHandler method to other possible setups (setExpiration) which would start session prematurely.
+        array_unshift($sessionSetup, new Nette\DI\Definitions\Statement("setHandler", [$definition]));
+
+        $sessionDefinition->setSetup($sessionSetup);
+    }
 }

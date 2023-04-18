@@ -1,4 +1,4 @@
-CREATE TABLE `sessions` (
+CREATE TABLE `session` (
   `id` char(32) CHARSET 'ascii' NOT NULL,
   `timestamp` int unsigned NOT NULL,
   `data` longtext CHARSET 'utf8mb4' NOT NULL,

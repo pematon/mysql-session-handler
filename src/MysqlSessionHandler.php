@@ -3,6 +3,7 @@
 namespace Pematon\Session;
 
 use Nette;
+use Nette\Database\Explorer;
 
 /**
  * Storing session to database.
@@ -10,136 +11,134 @@ use Nette;
  */
 class MysqlSessionHandler implements \SessionHandlerInterface
 {
-	private $tableName;
+    private Explorer $database;
 
-	/** @var Nette\Database\Context */
-	private $context;
+    private string $tableName;
+    private ?string $lockId = null;
 
-	private $lockId;
+    public function __construct(Nette\Database\Explorer $database)
+    {
+        $this->database = $database;
+    }
 
-	public function __construct(Nette\Database\Context $context)
-	{
-		$this->context = $context;
-	}
+    public function setTableName(string $tableName): void
+    {
+        $this->tableName = $tableName;
+    }
 
-	public function setTableName($tableName)
-	{
-		$this->tableName = $tableName;
-	}
+    protected function hash(string $id): string
+    {
+        return md5($id);
+    }
 
-	protected function hash($id)
-	{
-		return md5($id);
-	}
+    private function lock(): void
+    {
+        if ($this->lockId === null) {
+            $this->lockId = md5(session_id());
 
-	private function lock() {
-		if ($this->lockId === null) {
-			$this->lockId = md5(session_id());
-			while (!$this->context->query("SELECT GET_LOCK(?, 1) as `lock`", $this->lockId)->fetch()->lock);
-		}
-	}
+            /** @noinspection PhpStatementHasEmptyBodyInspection */
+            while (!$this->database->query("SELECT GET_LOCK(?, 1) AS `lock`", $this->lockId)->fetch()->lock) ;
+        }
+    }
 
-	private function unlock() {
-		if ($this->lockId === null) {
-			return;
-		}
+    private function unlock(): void
+    {
+        if ($this->lockId === null) {
+            return;
+        }
 
-		$this->context->query("SELECT RELEASE_LOCK(?)", $this->lockId);
-		$this->lockId = null;
-	}
+        $this->database->query("SELECT RELEASE_LOCK(?)", $this->lockId);
+        $this->lockId = null;
+    }
 
-	public function open($savePath, $name)
-	{
-		$this->lock();
+    public function open(string $path, string $name): bool
+    {
+        $this->lock();
 
-		return TRUE;
-	}
+        return true;
+    }
 
-	public function close()
-	{
-		$this->unlock();
+    public function close(): bool
+    {
+        $this->unlock();
 
-		return TRUE;
-	}
+        return true;
+    }
 
-	public function destroy($sessionId)
-	{
-		$hashedSessionId = $this->hash($sessionId);
+    public function destroy($id): bool
+    {
+        $hashedSessionId = $this->hash($id);
 
-		$this->context->table($this->tableName)->where('id', $hashedSessionId)->delete();
+        $this->database->table($this->tableName)->where("id", $hashedSessionId)->delete();
 
-		$this->unlock();
+        $this->unlock();
 
-		return TRUE;
-	}
+        return true;
+    }
 
-	public function read($sessionId)
-	{
-		$this->lock();
+    public function read($id): string|false
+    {
+        $this->lock();
 
-		$hashedSessionId = $this->hash($sessionId);
+        $hashedSessionId = $this->hash($id);
 
-		$row = $this->context->table($this->tableName)->get($hashedSessionId);
+        $row = $this->database->table($this->tableName)->get($hashedSessionId);
 
-		if ($row) {
-			return $row->data;
-		}
+        return $row ? (string)($row["data"]) : "";
+    }
 
-		return '';
-	}
+    public function write(string $id, string $data): bool
+    {
+        $this->lock();
 
-	public function write($sessionId, $sessionData)
-	{
-		$this->lock();
+        $hashedId = $this->hash($id);
+        $time = time();
 
-		$hashedSessionId = $this->hash($sessionId);
-		$time = time();
+        if ($row = $this->database->table($this->tableName)->get($hashedId)) {
+            if ($row["data"] !== $data) {
+                $row->update([
+                    "timestamp" => $time,
+                    "data" => $data,
+                ]);
+            } else if ($time - $row["timestamp"] > 300) {
+                // Optimization: When data has not been changed, only update
+                // the timestamp after 5 minutes.
+                $row->update([
+                    "timestamp" => $time,
+                ]);
+            }
+        } else {
+            $this->database->table($this->tableName)->insert([
+                "id" => $hashedId,
+                "timestamp" => $time,
+                "data" => $data,
+            ]);
+        }
 
-		if ($row = $this->context->table($this->tableName)->get($hashedSessionId)) {
-			if ($row->data !== $sessionData) {
-				$row->update(array(
-					'timestamp' => $time,
-					'data' => $sessionData,
-				));
-			} else if ($time - $row->timestamp > 300) {
-				// Optimization: When data has not been changed, only update
-				// the timestamp after 5 minutes.
-				$row->update(array(
-					'timestamp' => $time,
-				));
-			}
-		} else {
-			$this->context->table($this->tableName)->insert(array(
-				'id' => $hashedSessionId,
-				'timestamp' => $time,
-				'data' => $sessionData,
-			));
-		}
+        return true;
+    }
 
-		return TRUE;
-	}
+    public function gc(int $max_lifetime): int|false
+    {
+        $maxTimestamp = time() - $max_lifetime;
 
-	public function gc($maxLifeTime)
-	{
-		$maxTimestamp = time() - $maxLifeTime;
+        // Try to avoid a conflict when running garbage collection simultaneously on two
+        // MySQL servers at a very busy site in a master-master replication setup by
+        // subtracting one tenth of $maxLifeTime (but at least one day) from $maxTimestamp
+        // for each server with reasonably small ID except for the server with ID 1.
+        //
+        // In a typical master-master replication setup, the server IDs are 1 and 2.
+        // There is no subtraction on server 1 and one day (or one tenth of $maxLifeTime)
+        // subtraction on server 2.
+        $serverId = $this->database->query("SELECT @@server_id AS `server_id`")->fetch()->server_id;
+        if ($serverId > 1 && $serverId < 10) {
+            $maxTimestamp -= ($serverId - 1) * max(86400, $max_lifetime / 10);
+        }
 
-		// Try to avoid a conflict when running garbage collection simultaneously on two
-		// MySQL servers at a very busy site in a master-master replication setup by
-		// subtracting one tenth of $maxLifeTime (but at least one day) from $maxTimestamp
-		// for each server with reasonably small ID except for the server with ID 1.
-		//
-		// In a typical master-master replication setup, the server IDs are 1 and 2.
-		// There is no subtraction on server 1 and one day (or one tenth of $maxLifeTime)
-		// subtraction on server 2.
-		$serverId = $this->context->query("SELECT @@server_id as `server_id`")->fetch()->server_id;
-		if ($serverId > 1 && $serverId < 10) {
-			$maxTimestamp -= ($serverId - 1) * max(86400, $maxLifeTime / 10);
-		}
+        $this->database->table($this->tableName)
+            ->where("timestamp < ?", (int)$maxTimestamp)
+            ->delete();
 
-		$this->context->table($this->tableName)
-			->where('timestamp < ?', $maxTimestamp)
-			->delete();
-
-		return TRUE;
-	}
+        return true;
+    }
 }
