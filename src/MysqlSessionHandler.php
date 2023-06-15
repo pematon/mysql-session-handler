@@ -135,10 +135,8 @@ class MysqlSessionHandler implements \SessionHandlerInterface
             $maxTimestamp -= ($serverId - 1) * max(86400, $max_lifetime / 10);
         }
 
-        $this->database->table($this->tableName)
+        return $this->database->table($this->tableName)
             ->where("timestamp < ?", (int)$maxTimestamp)
             ->delete();
-
-        return true;
     }
 }
